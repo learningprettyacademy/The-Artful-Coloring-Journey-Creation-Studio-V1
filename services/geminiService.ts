@@ -65,8 +65,9 @@ export const generateProjectPlan = async (
     2. A high-level Concept description integrating the "${theme}".
     3. 3-5 Color Palette suggestions (descriptive).
     4. A list of 5-8 specific pages/sections to include (e.g., Cover, Daily Spread, Habit Tracker, Quote Page). 
-       - For each page, provide a specific, highly detailed image generation prompt suitable for creating a black-and-white coloring page or a cover design. 
-       - Ensure the prompts explicitly mention "clean black and white line art", "coloring book style", "no shading" where appropriate.
+       - For each page, provide a specific, highly detailed image generation prompt.
+       - IMPORTANT: For the 'Cover', the prompt MUST specify "Full Color, Vibrant".
+       - IMPORTANT: For internal pages, the prompt MUST specify "Clean black and white line art, coloring book style".
     5. 3 specific Monetization strategies (e.g., bundles, digital vs physical, etsy tips).
   `;
 
@@ -108,7 +109,12 @@ export const generateProjectPlan = async (
     if (!data) throw new Error("Failed to parse AI response");
 
     // Add IDs to pages for easier React key management
-    data.pages = data.pages.map((p: any, i: number) => ({...p, id: `page_${Date.now()}_${i}`}));
+    // Set default renderMode based on isCover
+    data.pages = data.pages.map((p: any, i: number) => ({
+        ...p, 
+        id: `page_${Date.now()}_${i}`,
+        renderMode: p.isCover ? 'color' : 'line_art'
+    }));
     return data as ProjectPlan;
   } catch (error) {
     console.error("Error generating plan:", error);
@@ -129,6 +135,7 @@ export const generateAdditionalPages = async (
         
         Task: Create 3 NEW, UNIQUE page ideas that fit this project theme but are NOT duplicates of existing pages.
         Provide a name, description, and detailed image prompt for each.
+        Assume these are internal coloring/planning pages (Black and White Line Art).
     `;
 
     const responseSchema: Schema = {
@@ -158,7 +165,12 @@ export const generateAdditionalPages = async (
         const data = parseGeminiJson(response.text);
         if (!data) return [];
 
-        return data.map((p: any, i: number) => ({...p, id: `auto_extra_${Date.now()}_${i}`, isCover: false}));
+        return data.map((p: any, i: number) => ({
+            ...p, 
+            id: `auto_extra_${Date.now()}_${i}`, 
+            isCover: false,
+            renderMode: 'line_art'
+        }));
     } catch (e) {
         console.error("Error generating additional pages", e);
         return [];
@@ -181,9 +193,9 @@ export const generateCreativePrompts = async (
         specificInst = "Create prompts for INTERIOR COLORING PAGES. Black and white, clean line art, no shading, high contrast.";
     } else if (type === 'sticker') {
         if (styleMode === 'color') {
-             specificInst = "Create prompts for FULL COLOR Sticker sheets. Cute, die-cut style, white borders.";
+             specificInst = "Create prompts for FULL COLOR Sticker sheets. Cute, die-cut style, white borders, vibrant colors.";
         } else {
-             specificInst = "Create prompts for BLACK & WHITE LINE ART Sticker sheets (coloring stickers). Die-cut style, white borders.";
+             specificInst = "Create prompts for BLACK & WHITE LINE ART Sticker sheets (coloring stickers). Die-cut style, white borders, no fill.";
         }
     }
 
@@ -258,7 +270,8 @@ export const regeneratePageConcept = async (
         });
         const data = parseGeminiJson(response.text);
         if (!data) throw new Error("No data");
-        return data;
+        // Inherit default B&W unless cover
+        return { ...data, renderMode: data.isCover ? 'color' : 'line_art' };
     } catch (e) {
         console.error("Error regenerating page", e);
         throw e;
@@ -268,27 +281,50 @@ export const regeneratePageConcept = async (
 export const generateAssetImage = async (
     prompt: string, 
     type: 'coloring_page' | 'cover' | 'sticker' | 'divider' | 'mockup',
-    size: PublicationSize
+    size: PublicationSize,
+    renderMode?: 'color' | 'line_art'
 ): Promise<string> => {
   const ai = getClient();
 
   // --- STRICT STYLE ENFORCEMENT ---
   let enhancedPrompt = prompt;
 
+  // Define Strong Directives
+  const COLOR_DIRECTIVES = "(FULL COLOR VIBRANT ILLUSTRATION), (NO BLACK AND WHITE), (NO OUTLINE ONLY), (RICH COLORS), (professional illustration), (NO RANDOM AUTHOR NAMES)";
+  const LINE_ART_DIRECTIVES = "(STRICT BLACK AND WHITE LINE ART), (NO COLORS), (NO GRAYSCALE), (NO SHADING), (clean crisp vector lines), (white background), (high contrast)";
+
+  // Determine effective mode
+  let effectiveMode = renderMode;
+  if (!effectiveMode) {
+      // Fallbacks if not specified
+      if (type === 'cover') effectiveMode = 'color';
+      else effectiveMode = 'line_art';
+  }
+
+  // FORCE OVERRIDES based on request requirements
   if (type === 'cover') {
-      // Rule: All COVERS should be FULL COLOR
-      // Rule: Do not add random author names.
-      // Rule: Text is allowed if in the prompt (removed (NO TEXT) tag).
-      enhancedPrompt = `(FULL COLOR ILLUSTRATION), (NO RANDOM AUTHOR NAMES), ${prompt}. vibrant colors, highly detailed professional book cover art, 8k resolution.`;
-  } 
-  else if (type === 'coloring_page' || type === 'divider') {
-      // Rule: Inside pages must be B&W line art
-      enhancedPrompt = `(STRICT BLACK AND WHITE LINE ART), (NO GRAYSCALE), (NO SHADING), (NO COLORS), ${prompt}. clean crisp vector lines, professional coloring book page, white background, high contrast, intricate details.`;
+      // If user specifically asked for line art cover, we respect it, otherwise FORCE color
+      if (effectiveMode === 'line_art') {
+           enhancedPrompt = `${LINE_ART_DIRECTIVES}, book cover design, ${prompt}`;
+      } else {
+           enhancedPrompt = `${COLOR_DIRECTIVES}, book cover design, 8k resolution, ${prompt}`;
+      }
   } 
   else if (type === 'sticker') {
-      // Stickers can be either, usually the prompt from the generator specifies "full color" or "line art". 
-      // We add safety nets.
-      enhancedPrompt = `${prompt}, sticker sheet design, thick white border around items, die-cut style, simple vector graphic, white background, organized layout.`;
+      // Sticker logic
+      if (effectiveMode === 'color') {
+          enhancedPrompt = `${COLOR_DIRECTIVES}, sticker sheet design, thick white border around items, die-cut style, simple vector graphic, white background, organized layout, ${prompt}`;
+      } else {
+          enhancedPrompt = `${LINE_ART_DIRECTIVES}, sticker sheet design, thick white border around items, die-cut style, simple vector graphic, white background, organized layout, ${prompt}`;
+      }
+  }
+  else {
+      // Coloring Pages / Dividers / Default
+      if (effectiveMode === 'color') {
+          enhancedPrompt = `${COLOR_DIRECTIVES}, ${prompt}`;
+      } else {
+          enhancedPrompt = `${LINE_ART_DIRECTIVES}, professional coloring book page, intricate details, ${prompt}`;
+      }
   }
 
   // Determine aspect ratio based on publication size
@@ -299,7 +335,6 @@ export const generateAssetImage = async (
       aspectRatio = "4:3";
   }
   
-  // Mockups often look better in landscape or square depending on the scene, defaulting to 1:1 or 4:3 is safe
   if (type === 'mockup') {
       aspectRatio = "4:3"; 
   }

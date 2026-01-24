@@ -9,6 +9,8 @@ import { MockupGenerator } from './components/MockupGenerator';
 import { AuthScreen } from './components/AuthScreen';
 import { AppStep, WizardState, ProjectPlan, GeneratedImage, GeneratedPage, SavedProject, AppView } from './types';
 import { generateProjectPlan, generateAssetImage } from './services/geminiService';
+import { getAllProjectsFromDB, saveProjectToDB, deleteProjectFromDB } from './services/storageService';
+import { Menu } from 'lucide-react';
 
 export default function App() {
   // --- Auth State ---
@@ -17,6 +19,7 @@ export default function App() {
   // --- Global State ---
   const [darkMode, setDarkMode] = useState(false);
   const [currentView, setCurrentView] = useState<AppView>('dashboard');
+  const [isMobileOpen, setIsMobileOpen] = useState(false);
   
   // --- Project State ---
   const [projectId, setProjectId] = useState<string | null>(null);
@@ -42,19 +45,22 @@ export default function App() {
   // --- Saved Data State ---
   const [savedProjects, setSavedProjects] = useState<SavedProject[]>([]);
 
-  // Load from local storage on mount
+  // Load from IndexedDB on mount
   useEffect(() => {
-    try {
-        const saved = localStorage.getItem('brown_suga_projects');
-        if (saved) {
-            setSavedProjects(JSON.parse(saved));
+    const loadProjects = async () => {
+        try {
+            const saved = await getAllProjectsFromDB();
+            setSavedProjects(saved);
+        } catch (e) {
+            console.error("Failed to load saved projects from DB", e);
         }
-    } catch (e) {
-        console.error("Failed to load saved projects", e);
+    };
+    if (isAuthenticated) {
+        loadProjects();
     }
-  }, []);
+  }, [isAuthenticated]);
 
-  // Save to local storage whenever project data changes (if active project)
+  // Save to IndexedDB whenever project data changes (if active project)
   useEffect(() => {
      if (projectId && projectPlan) {
          const updatedProject: SavedProject = {
@@ -66,16 +72,16 @@ export default function App() {
              pages: pages
          };
 
-         const otherProjects = savedProjects.filter(p => p.id !== projectId);
-         const newSavedList = [updatedProject, ...otherProjects];
+         // Optimistic UI update
+         setSavedProjects(prev => {
+             const others = prev.filter(p => p.id !== projectId);
+             return [updatedProject, ...others];
+         });
          
-         setSavedProjects(newSavedList);
-         
-         try {
-             localStorage.setItem('brown_suga_projects', JSON.stringify(newSavedList));
-         } catch (e) {
-             console.error("LocalStorage Save Failed - likely quota exceeded", e);
-         }
+         // Async Save to DB
+         saveProjectToDB(updatedProject).catch(err => {
+             console.error("Failed to save project to DB", err);
+         });
      }
   }, [projectPlan, pages, generatedImages, wizardState, projectId]); 
 
@@ -189,25 +195,31 @@ export default function App() {
       setCurrentView('dashboard');
   };
 
-  const deleteProject = (id: string) => {
+  const deleteProject = async (id: string) => {
       if(confirm("Are you sure you want to delete this project? This cannot be undone.")) {
-          const updated = savedProjects.filter(p => p.id !== id);
-          setSavedProjects(updated);
-          localStorage.setItem('brown_suga_projects', JSON.stringify(updated));
-          if (projectId === id) {
-              handleRestart();
-              setCurrentView('projects');
+          try {
+              await deleteProjectFromDB(id);
+              setSavedProjects(prev => prev.filter(p => p.id !== id));
+              
+              if (projectId === id) {
+                  handleRestart();
+                  setCurrentView('projects');
+              }
+          } catch (e) {
+              console.error("Failed to delete project", e);
+              alert("Failed to delete project");
           }
       }
   };
   
-  const handleAddPageFromLibrary = (name: string, prompt: string) => {
+  const handleAddPageFromLibrary = (name: string, prompt: string, renderMode: 'color' | 'line_art') => {
       const newPage: GeneratedPage = {
           id: `custom_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
           name: name,
           description: "Added from Prompt Generator",
           imagePrompt: prompt,
-          isCover: false 
+          isCover: false,
+          renderMode: renderMode // Pass the render mode
       };
       setPages(prev => [...prev, newPage]);
       alert("Success: Page added to Prompt Library/Project Plan!");
@@ -288,7 +300,7 @@ export default function App() {
   };
 
   return (
-    <div className={`flex h-screen overflow-hidden transition-colors duration-500 font-sans ${darkMode ? 'bg-[#0f0720]' : 'bg-purple-50'}`}>
+    <div className={`flex flex-col md:flex-row h-[100dvh] overflow-hidden transition-colors duration-500 font-sans ${darkMode ? 'bg-[#0f0720]' : 'bg-purple-50'}`}>
        
        {/* Background Elements */}
        <div className="fixed inset-0 z-0 overflow-hidden pointer-events-none">
@@ -307,10 +319,25 @@ export default function App() {
               darkMode={darkMode}
               setDarkMode={setDarkMode}
               hasActiveProject={!!projectPlan && step === AppStep.DASHBOARD}
+              isMobileOpen={isMobileOpen}
+              setIsMobileOpen={setIsMobileOpen}
            />
 
            {/* Main Content */}
-           <main className="flex-1 relative z-10 overflow-hidden flex flex-col">
+           <main className="flex-1 relative z-10 overflow-hidden flex flex-col w-full">
+              {/* Mobile Header Trigger */}
+              <div className="md:hidden p-4 flex items-center justify-between bg-[#1a0b2e] border-b border-purple-800 shadow-md z-30">
+                  <div className="flex items-center gap-3">
+                    <span className="font-serif font-bold text-white text-lg">Brown Suga Studio</span>
+                  </div>
+                  <button 
+                    onClick={() => setIsMobileOpen(true)} 
+                    className="text-white p-2 rounded-lg bg-purple-900/50 border border-purple-700 hover:bg-purple-800"
+                  >
+                      <Menu size={24} />
+                  </button>
+              </div>
+
               <div className="flex-1 overflow-y-auto custom-scrollbar">
                  {renderMainContent()}
               </div>

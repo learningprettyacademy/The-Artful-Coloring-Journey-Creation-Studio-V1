@@ -26,6 +26,7 @@ export interface GeneratedPage {
   description: string;
   imagePrompt: string;
   isCover: boolean;
+  renderMode?: 'color' | 'line_art'; // New field to strictly control output style
 }
 
 export interface ProjectPlan {

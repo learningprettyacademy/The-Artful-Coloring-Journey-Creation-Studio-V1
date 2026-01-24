@@ -65,6 +65,10 @@ export const Dashboard: React.FC<DashboardProps> = ({
     setIsEditingPlan(false);
   };
 
+  const updatePageRenderMode = (pageId: string, mode: 'color' | 'line_art') => {
+      setPages(prev => prev.map(p => p.id === pageId ? { ...p, renderMode: mode } : p));
+  };
+
   const handleGenerateImage = async (page: GeneratedPage, forceRegenerate = false) => {
     const existing = images.find(img => img.id === page.id);
     if (existing && existing.url && !forceRegenerate) return;
@@ -89,7 +93,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
         const base64Url = await generateAssetImage(
             page.imagePrompt, 
             page.isCover ? 'cover' : 'coloring_page',
-            publicationSize
+            publicationSize,
+            page.renderMode // Pass the user selected render mode
         );
         
         setImages(prev => prev.map(img => 
@@ -166,7 +171,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
           name: newPageName,
           description: "Custom user page",
           imagePrompt: newPagePrompt,
-          isCover: false
+          isCover: false,
+          renderMode: 'line_art' // default to line art
       };
       setPages([...pages, newPage]);
       setNewPageName("");
@@ -291,12 +297,12 @@ export const Dashboard: React.FC<DashboardProps> = ({
   };
 
   return (
-    <div className="p-8 max-w-7xl mx-auto h-full overflow-y-auto animate-fade-in text-white">
+    <div className="p-4 md:p-8 max-w-7xl mx-auto h-full overflow-y-auto animate-fade-in text-white">
       {/* Header Actions */}
       <div className="flex flex-col gap-6 mb-8 border-b border-purple-800/50 pb-8">
         
         {/* Title/Desc Box with Purple Neon Effect */}
-        <div className="w-full bg-[#2d1b4e] border border-fuchsia-500 shadow-[0_0_15px_rgba(217,70,239,0.3)] rounded-2xl p-6 relative group transition-all hover:shadow-[0_0_25px_rgba(217,70,239,0.5)]">
+        <div className="w-full bg-[#2d1b4e] border border-fuchsia-500 shadow-[0_0_15px_rgba(217,70,239,0.3)] rounded-2xl p-4 md:p-6 relative group transition-all hover:shadow-[0_0_25px_rgba(217,70,239,0.5)]">
              <div className="absolute top-4 right-4 z-20">
                  {isEditingPlan ? (
                      <div className="flex gap-2">
@@ -311,7 +317,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
              </div>
 
              <div className="flex flex-col gap-4">
-                 <div className="flex items-center gap-4">
+                 <div className="flex items-center gap-2 md:gap-4 flex-wrap">
                      <button onClick={onRestart} className="p-2 hover:bg-purple-800 rounded-full transition-colors flex-shrink-0" title="Back to Wizard">
                          <ArrowLeft size={20} className="text-purple-400"/>
                      </button>
@@ -321,13 +327,13 @@ export const Dashboard: React.FC<DashboardProps> = ({
                      </div>
                  </div>
 
-                 <div className="pr-12">
+                 <div className="pr-8 md:pr-12">
                      {isEditingPlan ? (
                          <div className="space-y-3">
                              <input 
                                 value={editedPlanTitle}
                                 onChange={(e) => setEditedPlanTitle(e.target.value)}
-                                className="bg-[#1a0b2e] border border-fuchsia-500 rounded px-3 py-2 text-2xl font-bold font-serif w-full text-white shadow-[0_0_10px_rgba(217,70,239,0.2)]"
+                                className="bg-[#1a0b2e] border border-fuchsia-500 rounded px-3 py-2 text-xl md:text-2xl font-bold font-serif w-full text-white shadow-[0_0_10px_rgba(217,70,239,0.2)]"
                              />
                              <textarea 
                                 value={editedPlanConcept}
@@ -337,10 +343,10 @@ export const Dashboard: React.FC<DashboardProps> = ({
                          </div>
                      ) : (
                          <>
-                            <h2 className="text-4xl font-bold font-serif text-white drop-shadow-md mb-3 leading-tight">
+                            <h2 className="text-2xl md:text-4xl font-bold font-serif text-white drop-shadow-md mb-3 leading-tight break-words">
                                 {plan.projectTitle}
                             </h2>
-                            <p className="text-purple-200 max-w-4xl leading-relaxed text-lg border-l-4 border-fuchsia-600 pl-4 bg-purple-900/20 py-2 rounded-r-lg">
+                            <p className="text-purple-200 max-w-4xl leading-relaxed text-sm md:text-lg border-l-4 border-fuchsia-600 pl-4 bg-purple-900/20 py-2 rounded-r-lg">
                                 {plan.concept}
                             </p>
                          </>
@@ -350,34 +356,37 @@ export const Dashboard: React.FC<DashboardProps> = ({
         </div>
 
         {/* Buttons Row */}
-        <div className="flex flex-wrap gap-3">
+        <div className="flex flex-wrap gap-2 md:gap-3">
              <button 
                 onClick={handleGenerateMorePages}
                 disabled={generatingExtra}
-                className="px-5 py-3 bg-purple-900 border border-purple-600 text-purple-100 hover:text-white hover:border-fuchsia-500 rounded-xl transition-all flex items-center gap-2 shadow-md hover:shadow-lg font-medium"
+                className="flex-1 md:flex-none justify-center px-4 py-3 bg-purple-900 border border-purple-600 text-purple-100 hover:text-white hover:border-fuchsia-500 rounded-xl transition-all flex items-center gap-2 shadow-md hover:shadow-lg font-medium text-sm md:text-base"
              >
                 {generatingExtra ? <Loader2 className="animate-spin" size={18}/> : <Plus size={18} />} 
-                Auto-Add Pages
+                <span className="hidden sm:inline">Auto-Add Pages</span>
+                <span className="sm:hidden">Auto Add</span>
              </button>
              <button 
                 onClick={() => setShowAddPage(true)}
-                className="px-5 py-3 bg-purple-900 border border-purple-600 text-purple-100 hover:text-white hover:border-fuchsia-500 rounded-xl transition-all flex items-center gap-2 shadow-md hover:shadow-lg font-medium"
+                className="flex-1 md:flex-none justify-center px-4 py-3 bg-purple-900 border border-purple-600 text-purple-100 hover:text-white hover:border-fuchsia-500 rounded-xl transition-all flex items-center gap-2 shadow-md hover:shadow-lg font-medium text-sm md:text-base"
              >
-                <Edit2 size={18} /> Manual Add
+                <Edit2 size={18} /> 
+                <span className="hidden sm:inline">Manual Add</span>
+                <span className="sm:hidden">Manual</span>
              </button>
              <div className="w-px bg-purple-700 mx-2 hidden md:block"></div>
              <button 
                 onClick={handleExportZip}
                 disabled={isExporting}
-                className="px-5 py-3 bg-indigo-900 border border-indigo-500 text-indigo-100 hover:bg-indigo-800 rounded-xl transition-all flex items-center gap-2 shadow-md hover:shadow-lg font-medium"
+                className="flex-1 md:flex-none justify-center px-4 py-3 bg-indigo-900 border border-indigo-500 text-indigo-100 hover:bg-indigo-800 rounded-xl transition-all flex items-center gap-2 shadow-md hover:shadow-lg font-medium text-sm md:text-base"
                 title="Download Images + Prompts + PDF"
              >
-                <FileArchive size={18} /> ZIP Kit
+                <FileArchive size={18} /> ZIP
              </button>
              <button 
                 onClick={handleExportPDF}
                 disabled={isExporting}
-                className="px-5 py-3 bg-fuchsia-900 border border-fuchsia-500 text-fuchsia-100 hover:bg-fuchsia-800 rounded-xl transition-all flex items-center gap-2 shadow-md hover:shadow-lg font-medium"
+                className="flex-1 md:flex-none justify-center px-4 py-3 bg-fuchsia-900 border border-fuchsia-500 text-fuchsia-100 hover:bg-fuchsia-800 rounded-xl transition-all flex items-center gap-2 shadow-md hover:shadow-lg font-medium text-sm md:text-base"
                 title="Download Printable PDF (Images Only)"
              >
                 <FileText size={18} /> PDF
@@ -440,6 +449,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
           const isGeneratingThis = generatingId === page.id;
           const isRegeneratingThis = regeneratingId === page.id;
           const isEditingThis = editingPageId === page.id;
+          
+          // Determine active render mode for display toggle
+          const currentMode = page.renderMode || (page.isCover ? 'color' : 'line_art');
 
           return (
             <div key={page.id} className={`group bg-[#1a0b2e] border rounded-2xl overflow-hidden transition-all duration-300 hover:shadow-[0_0_25px_rgba(168,85,247,0.2)] flex flex-col ${isEditingThis ? 'border-fuchsia-500 ring-1 ring-fuchsia-500' : 'border-purple-800 hover:border-purple-500'}`}>
@@ -492,6 +504,25 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 </div>
               </div>
 
+              {/* Render Mode Toggle Bar */}
+              <div className="bg-[#130722] px-4 py-2 flex items-center justify-between border-b border-purple-900/50">
+                  <span className="text-[10px] uppercase text-purple-400 font-bold tracking-wider">Style Mode</span>
+                  <div className="flex gap-1 bg-black/40 p-0.5 rounded-lg border border-purple-800">
+                      <button 
+                         onClick={() => updatePageRenderMode(page.id, 'color')}
+                         className={`text-[10px] px-2 py-0.5 rounded-md transition-all ${currentMode === 'color' ? 'bg-fuchsia-600 text-white' : 'text-purple-400 hover:text-white'}`}
+                      >
+                          Color
+                      </button>
+                      <button 
+                         onClick={() => updatePageRenderMode(page.id, 'line_art')}
+                         className={`text-[10px] px-2 py-0.5 rounded-md transition-all ${currentMode === 'line_art' ? 'bg-fuchsia-600 text-white' : 'text-purple-400 hover:text-white'}`}
+                      >
+                          Line Art
+                      </button>
+                  </div>
+              </div>
+
               {/* Image Area */}
               <div className="aspect-[3/4] bg-[#0f0518] relative flex items-center justify-center p-4">
                 {isGeneratingThis ? (
@@ -526,7 +557,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                             onClick={() => handleGenerateImage(page)}
                             className="px-4 py-2 bg-purple-800 hover:bg-fuchsia-600 text-white rounded-lg text-sm font-medium transition-colors shadow-lg border border-purple-600"
                         >
-                            Generate Design
+                            Generate ({currentMode === 'color' ? 'Color' : 'Line Art'})
                         </button>
                     </div>
                 )}
@@ -571,18 +602,18 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
       {/* Monetization & Strategy Box (Footer) */}
       <div className="mt-16 border-t border-purple-800 pt-10">
-          <div className="bg-[#2d1b4e] border border-fuchsia-500 shadow-[0_0_15px_rgba(217,70,239,0.5)] rounded-2xl p-8">
+          <div className="bg-[#2d1b4e] border border-fuchsia-500 shadow-[0_0_15px_rgba(217,70,239,0.5)] rounded-2xl p-6 md:p-8">
                <div className="flex flex-col md:flex-row gap-8">
                    {/* Strategy Column */}
                    <div className="flex-1">
-                       <h3 className="text-2xl font-bold text-white mb-6 flex items-center gap-3">
+                       <h3 className="text-xl md:text-2xl font-bold text-white mb-6 flex items-center gap-3">
                            <DollarSign className="text-fuchsia-400" size={28} /> 
                            Monetization Strategy
                        </h3>
                        <div className="space-y-4">
                             {plan.monetizationStrategies.map((strat, i) => (
                                 <div key={i} className="bg-[#1a0b2e] p-5 rounded-xl border border-purple-700 hover:border-fuchsia-500 transition-colors flex gap-4">
-                                    <span className="text-4xl font-serif font-bold text-purple-800/50">0{i+1}</span>
+                                    <span className="text-3xl md:text-4xl font-serif font-bold text-purple-800/50">0{i+1}</span>
                                     <div>
                                         <p className="text-purple-100 text-sm leading-relaxed">{strat}</p>
                                     </div>
